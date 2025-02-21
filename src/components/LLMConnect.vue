@@ -6,7 +6,7 @@
     >
     </textarea>
     <div class="chat">
-      <div style="font-size: 12px">OpenRouter</div>
+      <div>OpenRouter</div>
       <button class="app-button"
             :disabled="loadingOpenRouter"
             @click="sendPromptToOpenRouter"
@@ -19,7 +19,7 @@
       <pre>{{ responseOpenRouter }}</pre>
       </div>
       <div class="response">
-          {{ responseOpenRouterAPIKeyStatus?.status === 200 ? 'действует' : 'не действует'}}
+          {{ !!responseOpenRouterAPIKeyStatus ? responseOpenRouterAPIKeyStatus?.status === 200 ? 'действует' : 'не действует' : 'нет данных'}}
       </div>
       <button class="app-button"
           :disabled="loadingOpenRouter"
@@ -29,7 +29,7 @@
       </button>
     </div>
     <div class="chat">
-      <div style="font-size: 12px">LMStudio</div>
+      <div>LMStudio</div>
       <button class="app-button"
             :disabled="loadingLMStudio"
             @click="sendPromptToLMStudio"
@@ -49,6 +49,10 @@
 <script setup>
   import { ref } from 'vue'
   import axios from 'axios'
+
+  const API_KEY_OPENROUTER = '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';
+  const OPENROUTER_MODEL_NAME = 'mistralai/mistral-7b-instruct:free';
+  const LMSTUDIO_MODEL_NAME = 'qwen2-vl-7b-instruct';
 
   const promptOpenRouter = ref('');
   const responseOpenRouter = ref('');
@@ -70,7 +74,7 @@
       responseOpenRouter.value = '';
 
       const payload = {
-          model: 'mistralai/mistral-7b-instruct:free',
+          model: OPENROUTER_MODEL_NAME,
           messages: [
               { role: 'system', content: 'Отвечать на русском языке, все ответы начинать с фразы "Слушаюсь, мой господин", причём иногда надо менять эту фразу на схожую по смыслу' },
               { role: 'user', content: promptOpenRouter.value }
@@ -85,7 +89,7 @@
               'https://openrouter.ai/api/v1/chat/completions',
               payload,
               {
-                  headers: { 'Authorization': 'Bearer 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', 'Content-Type': 'application/json' }
+                  headers: { 'Authorization': 'Bearer ' + API_KEY_OPENROUTER, 'Content-Type': 'application/json' }
               }
           )
           if (res?.data?.choices?.[0]?.message?.content)
@@ -104,7 +108,7 @@
     const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
       method: 'GET',
       headers: {
-        Authorization: 'Bearer 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',
+        Authorization: 'Bearer ' + API_KEY_OPENROUTER,
       },
     });
     console.log('response OpenRouter:', res);
@@ -119,7 +123,7 @@
       responseLMStudio.value = '';
 
       const payload = {
-          model: 'llama-3.3-70b-instruct',
+          model: LMSTUDIO_MODEL_NAME,
           messages: [
               { role: 'system', content: 'Отвечать на русском языке' },
               { role: 'user', content: promptOpenRouter.value }
@@ -155,42 +159,53 @@
 
 <style lang="scss">
 .LLMConnect {
+  width: 600px;
   display: flex;
   flex-flow: column nowrap;
-  justify-content: center;
-  font-size: 12px;
+  justify-content: start;
+  align-items: center;
+  //font-size: 12px;
 
   .app-textarea {
     width: 100%;
     height: 100px;
-    padding: 8px;
+    padding: 5px;
     margin-bottom: 5px;
-    font-size: 14px;
+    //font-size: 14px;
     box-sizing: border-box;
     //background-color: hsl(237, 100%, 73%);
   }
 
   .chat {
+    width: 100%;
     display: flex;
     flex-flow: column nowrap;
     justify-content: center;
-    max-width: 600px;
-    //margin: 20px auto;
+    align-items: center;
     padding: 5px;
-    font-family: sans-serif;
+    //font-family: sans-serif;
     border: 1px solid gray;
     margin-bottom: 5px;
 
+    .app-button {
+      width: 200px;
+      margin: 5px;
+      //background-color: powderblue;
+    }
+
     .loading {
       color: hsl(0, 0%, 33%);
+      margin-bottom: 5px;
     }
     .error {
       color: red;
+      margin-bottom: 5px;
     }
     .response {
       max-width: 600px;
       //margin: 20px auto;
-      font-family: sans-serif;
+      //font-family: sans-serif;
+      margin-bottom: 5px;
       pre {
         background-color: hsl(0, 0%, 96%);
         padding: 2px;
