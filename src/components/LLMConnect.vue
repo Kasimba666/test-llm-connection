@@ -119,7 +119,7 @@
       responseLMStudio.value = '';
 
       const payload = {
-          model: 'mistralai/mistral-7b-instruct:free',
+          model: 'llama-3.3-70b-instruct',
           messages: [
               { role: 'system', content: 'Отвечать на русском языке' },
               { role: 'user', content: promptOpenRouter.value }
@@ -131,7 +131,7 @@
 
       try {
           const res = await axios.post(
-              'http://localhost:1234/v1/chat/completions',
+              'http://192.168.0.100:1234/v1/chat/completions',
               payload,
               {
                   headers: { 'Content-Type': 'application/json' }
