@@ -1,10 +1,12 @@
 <template>
   <div class="LLMConnect">
-    <textarea class="app-textarea"
-            v-model="promptOpenRouter"
-            placeholder="Введите ваше сообщение..."
-    >
-    </textarea>
+    <div class="chat">
+      <textarea class="app-textarea"
+                 v-model="promptOpenRouter"
+                 placeholder="Введите ваше сообщение..."
+      >
+      </textarea>
+    </div>
     <div class="chat">
       <div>OpenRouter</div>
       <button class="app-button"
@@ -18,15 +20,15 @@
       <div v-if="responseOpenRouter" class="response">
       <pre>{{ responseOpenRouter }}</pre>
       </div>
-      <div class="response">
-          {{ !!responseOpenRouterAPIKeyStatus ? responseOpenRouterAPIKeyStatus?.status === 200 ? 'действует' : 'не действует' : 'нет данных'}}
-      </div>
       <button class="app-button"
           :disabled="loadingOpenRouter"
-          @click="checkOpenRouterAPIKeyIsValid"
+          @click="checkOpenRouterAPIKey"
       >
         Проверить ключ
       </button>
+      <div class="response">
+          Статус ключа: {{ !!responseOpenRouterAPIKeyStatus ? responseOpenRouterAPIKeyStatus === 200 ? 'действует' : `не действует (${responseOpenRouterAPIKeyStatus})` : 'нет данных'}}
+      </div>
     </div>
     <div class="chat">
       <div>LMStudio</div>
@@ -43,28 +45,55 @@
       </div>
 
     </div>
+    <div class="chat">
+      <div>Ollama</div>
+      <button class="app-button"
+            :disabled="loadingOllama"
+            @click="sendPromptToOllama"
+      >
+          Отправить промт
+      </button>
+      <div v-if="loadingOllama" class="loading">Загрузка...</div>
+      <div v-if="errorOllama" class="error">Ошибка: {{ errorOllama }}</div>
+      <div v-if="responseOllama" class="response">
+        <pre>{{ responseOllama }}</pre>
+      </div>
+
+    </div>
   </div>
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  import axios from 'axios'
+  import { ref } from 'vue';
+  import axios from 'axios';
+  import ollama from 'ollama';
+  import OpenAI from "openai";
 
-  const API_KEY_OPENROUTER = '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';
+  const OPENROUTER_API_KEY = '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';
   const OPENROUTER_MODEL_NAME = 'mistralai/mistral-7b-instruct:free';
+  const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
+  const OPENROUTER_AUTH_URL = 'https://openrouter.ai/api/v1/auth/key';
   const LMSTUDIO_MODEL_NAME = 'qwen2-vl-7b-instruct';
+  const LMSTUDIO_URL = 'http://192.168.0.100:1234/v1/chat/completions';
+
+  const OLLAMA_MODEL_NAME = 'llama3.2:1b';
 
   const promptOpenRouter = ref('');
   const responseOpenRouter = ref('');
   const loadingOpenRouter = ref(false);
   const errorOpenRouter = ref('');
-  const responseOpenRouterAPIKeyStatus = ref('');
 
-  const promptLMStudio = ref('');
+  const responseOpenRouterAPIKeyStatus = ref('');
+  const loadingOpenRouterAPIKeyStatus = ref(false);
+  const errorOpenRouterAPIKeyStatus = ref('');
+
   const responseLMStudio = ref('');
   const loadingLMStudio = ref(false);
   const errorLMStudio = ref('');
 
+  const responseOllama = ref('');
+  const loadingOllama = ref(false);
+  const errorOllama = ref('');
 
   async function sendPromptToOpenRouter() {
       if (!promptOpenRouter.value.trim()) return;
@@ -73,46 +102,45 @@
       errorOpenRouter.value = '';
       responseOpenRouter.value = '';
 
-      const payload = {
+      const openai = new OpenAI({
+        baseURL: OPENROUTER_URL,
+        apiKey: OPENROUTER_API_KEY,
+        dangerouslyAllowBrowser: true
+      });
+
+      openai.chat.completions.create({
           model: OPENROUTER_MODEL_NAME,
           messages: [
-              { role: 'system', content: 'Отвечать на русском языке, все ответы начинать с фразы "Слушаюсь, мой господин", причём иногда надо менять эту фразу на схожую по смыслу' },
-              { role: 'user', content: promptOpenRouter.value }
+            { role: 'system', content: 'Всегда добавляй вначале "Да, мой господин"'},
+            { role: 'user', content: promptOpenRouter.value },
           ],
-          temperature: 0.7,
-          max_tokens: -1,
-          stream: false
-      }
-
-      try {
-          const res = await axios.post(
-              'https://openrouter.ai/api/v1/chat/completions',
-              payload,
-              {
-                  headers: { 'Authorization': 'Bearer ' + API_KEY_OPENROUTER, 'Content-Type': 'application/json' }
-              }
-          )
-          if (res?.data?.choices?.[0]?.message?.content)
-          {
-              responseOpenRouter.value = res.data.choices[0].message.content
-          } else {
-              responseOpenRouter.value = JSON.stringify(res.data, null, 2)
-          }
-      } catch (err) {
-          errorOpenRouter.value = err.response?.data?.message || err.message || 'Ошибка запроса'
-      } finally {
-          loadingOpenRouter.value = false
-      }
+          temperature: 0.7
+        })
+        .then((res)=>{
+          responseOpenRouter.value = res.choices[0].message.content;
+        }).catch((err)=>{
+          errorOpenRouter.value = err.message || 'Ошибка запроса';
+        }).finally(()=>{
+          loadingOpenRouter.value = false;
+        });
   }
-  async function checkOpenRouterAPIKeyIsValid() {
-    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
-      method: 'GET',
-      headers: {
-        Authorization: 'Bearer ' + API_KEY_OPENROUTER,
-      },
-    });
-    console.log('response OpenRouter:', res);
-    responseOpenRouterAPIKeyStatus.value = res;
+  async function checkOpenRouterAPIKey() {
+    loadingOpenRouterAPIKeyStatus.value = true;
+    errorOpenRouterAPIKeyStatus.value = '';
+    responseOpenRouterAPIKeyStatus.value = '';
+
+    fetch(OPENROUTER_AUTH_URL, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + OPENROUTER_API_KEY,
+        },
+      }).then((res)=>{
+        responseOpenRouterAPIKeyStatus.value = res.status;
+      }).catch((err)=>{
+        errorOpenRouterAPIKeyStatus.value = err.message || 'Ошибка запроса';
+      }).finally(()=>{
+        loadingOpenRouterAPIKeyStatus.value=false;
+      });
   }
 
   async function sendPromptToLMStudio() {
@@ -133,28 +161,47 @@
           stream: false
       }
 
-      try {
-          const res = await axios.post(
-              'http://192.168.0.100:1234/v1/chat/completions',
-              payload,
-              {
-                  headers: { 'Content-Type': 'application/json' }
-              }
-          )
-          if (res?.data?.choices?.[0]?.message?.content)
-          {
+      axios.post(
+        LMSTUDIO_URL,
+        payload,
+        {
+            headers: { 'Content-Type': 'application/json' }
+        }
+        ).then((res)=> {
               responseLMStudio.value = res.data.choices[0].message.content
-          } else {
-              responseLMStudio.value = JSON.stringify(res.data, null, 2)
-          }
-      } catch (err) {
+        }).catch((err)=> {
           errorLMStudio.value = err.response?.data?.message || err.message || 'Ошибка запроса'
-      } finally {
-          loadingLMStudio.value = false
-      }
+        }).finally (()=> {
+            loadingLMStudio.value = false;
+          }
+       );
   }
 
+  async function sendPromptToOllama() {
+    if (!promptOpenRouter.value.trim()) return;
 
+    loadingOllama.value = true;
+    errorOllama.value = '';
+    responseOllama.value = '';
+
+    const payload = {
+      model: OLLAMA_MODEL_NAME,
+      messages: [
+        { role: 'user', content: promptOpenRouter.value }
+      ],
+      stream: false
+    }
+    ollama.chat(payload)
+      .then(res=>{
+        responseOllama.value = res?.message?.content;
+      })
+      .catch(err=>{
+        errorOllama.value = err;
+      })
+      .finally(()=>{
+        loadingOllama.value = false;
+      });
+  }
 </script>
 
 <style lang="scss">
