@@ -49,9 +49,15 @@
       <div>Ollama</div>
       <button class="app-button"
             :disabled="loadingOllama"
-            @click="sendPromptToOllama"
+            @click="sendPromptToOllamaLocal"
       >
-          Отправить промт
+          Отправить промт локально
+      </button>
+      <button class="app-button"
+            :disabled="loadingOllama"
+            @click="sendPromptToOllamaLocalFetch"
+      >
+          Отправить промт локально (fetch)
       </button>
       <div v-if="loadingOllama" class="loading">Загрузка...</div>
       <div v-if="errorOllama" class="error">Ошибка: {{ errorOllama }}</div>
@@ -77,6 +83,7 @@
   const LMSTUDIO_URL = 'http://192.168.0.100:1234/v1/chat/completions';
 
   const OLLAMA_MODEL_NAME = 'llama3.2:1b';
+  const OLLAMA_URL = 'http://192.168.0.100:11434/api/generate';
 
   const promptOpenRouter = ref('');
   const responseOpenRouter = ref('');
@@ -177,7 +184,7 @@
        );
   }
 
-  async function sendPromptToOllama() {
+  async function sendPromptToOllamaLocal() {
     if (!promptOpenRouter.value.trim()) return;
 
     loadingOllama.value = true;
@@ -201,6 +208,36 @@
       .finally(()=>{
         loadingOllama.value = false;
       });
+  }
+  async function sendPromptToOllamaLocalFetch() {
+    if (!promptOpenRouter.value.trim()) return;
+
+    loadingOllama.value = true;
+    errorOllama.value = '';
+    responseOllama.value = '';
+    const payload = {
+        model: OLLAMA_MODEL_NAME,
+        prompt: promptOpenRouter.value
+    }
+
+    console.log('ollama fetch');
+
+    fetch(OLLAMA_URL, {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+      },
+      body: payload
+    }).then(res=> {
+        console.log('res: ', res);
+        responseOllama.value = res?.message?.content;
+        // responseOllama.value = res?.message?.content;
+    }).catch(err=>{
+            errorOllama.value = err;
+    }).finally(()=>{
+            loadingOllama.value = false;
+        });
+
   }
 </script>
 
