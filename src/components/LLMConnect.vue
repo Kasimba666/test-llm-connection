@@ -91,7 +91,7 @@
   const OLLAMA_API_KEY = 'ollama';
   const OLLAMA_MODEL_NAME = 'llama3.2:1b';
 
-  const OLLAMA_OPENAPI_URL = 'http://192.168.0.100:11434/v1/';
+  const OLLAMA_OPENAPI_ENDPOINT = '/v1';
   const OLLAMA_HOST = 'http://192.168.0.100:11434';
   const OLLAMA_ENDPOINT = '/api/generate';
   // const OLLAMA_ENDPOINT = '/api/chat';
@@ -212,7 +212,6 @@
     const ollama = new Ollama({ host: OLLAMA_HOST });
     ollama.chat(payload)
       .then(res=>{
-        console.log('ollama-js response: ', res);
         responseOllama.value = res?.message?.content;
       })
       .catch(err=>{
@@ -263,20 +262,20 @@
     responseOllama.value = '';
 
     const openai = new OpenAI({
-      baseURL: OLLAMA_OPENAPI_URL,
+      baseURL: OLLAMA_HOST+OLLAMA_OPENAPI_ENDPOINT,
       apiKey: OLLAMA_API_KEY,
       dangerouslyAllowBrowser: true
     });
 
-    openai.chat.completions.create({
-      model: OPENROUTER_MODEL_NAME,
-      prompt: promptText.value
-      // messages: [
-      //   { role: 'system', content: 'Всегда добавляй вначале "Да, мой господин"'},
-      //   { role: 'user', content: promptText.value },
-      // ],
-      // temperature: 0.7
-    }).then((res)=>{
+    const payload = {
+      model: OLLAMA_MODEL_NAME,
+      messages: [
+          // { role: 'system', content: 'Всегда добавляй вначале "Да, мой господин"'},
+          { role: 'user', content: promptText.value },
+      ]
+    }
+
+    openai.chat.completions.create(payload).then((res)=>{
       responseOllama.value = res.choices[0].message.content;
     }).catch((err)=>{
       errorOllama.value = err.message || 'Ошибка запроса';
