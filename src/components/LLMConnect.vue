@@ -2,7 +2,7 @@
   <div class="LLMConnect">
     <div class="chat">
       <textarea class="app-textarea"
-                 v-model="promptOpenRouter"
+                 v-model="promptText"
                  placeholder="Введите ваше сообщение..."
       >
       </textarea>
@@ -49,15 +49,21 @@
       <div>Ollama</div>
       <button class="app-button"
             :disabled="loadingOllama"
-            @click="sendPromptToOllamaLocal"
+            @click="sendPromptToOllama"
       >
-          Отправить промт локально
+          Отправить промт (ollama lib))
       </button>
       <button class="app-button"
             :disabled="loadingOllama"
-            @click="sendPromptToOllamaLocalFetch"
+            @click="sendPromptToOllamaFetch"
       >
-          Отправить промт локально (fetch)
+          Отправить промт (fetch)
+      </button>
+      <button class="app-button"
+            :disabled="loadingOllama"
+            @click="sendPromptToOllamaOpenAPI"
+      >
+          Отправить промт (openAPI)
       </button>
       <div v-if="loadingOllama" class="loading">Загрузка...</div>
       <div v-if="errorOllama" class="error">Ошибка: {{ errorOllama }}</div>
@@ -72,20 +78,25 @@
 <script setup>
   import { ref } from 'vue';
   import axios from 'axios';
-  import ollama from 'ollama';
+  import {Ollama} from 'ollama';
   import OpenAI from "openai";
 
   const OPENROUTER_API_KEY = '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';
   const OPENROUTER_MODEL_NAME = 'mistralai/mistral-7b-instruct:free';
-  const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
+  const OPENROUTER_OPENAPI_URL = 'https://openrouter.ai/api/v1';
   const OPENROUTER_AUTH_URL = 'https://openrouter.ai/api/v1/auth/key';
   const LMSTUDIO_MODEL_NAME = 'qwen2-vl-7b-instruct';
-  const LMSTUDIO_URL = 'http://192.168.0.100:1234/v1/chat/completions';
+  const LMSTUDIO_OPENAPI_URL = 'http://192.168.0.100:1234/v1/chat/completions';
 
+  const OLLAMA_API_KEY = 'ollama';
   const OLLAMA_MODEL_NAME = 'llama3.2:1b';
-  const OLLAMA_URL = 'http://192.168.0.100:11434/api/generate';
 
-  const promptOpenRouter = ref('');
+  const OLLAMA_OPENAPI_URL = 'http://192.168.0.100:11434/v1/';
+  const OLLAMA_HOST = 'http://192.168.0.100:11434';
+  const OLLAMA_ENDPOINT = '/api/generate';
+  // const OLLAMA_ENDPOINT = '/api/chat';
+
+  const promptText = ref('2+2=?');
   const responseOpenRouter = ref('');
   const loadingOpenRouter = ref(false);
   const errorOpenRouter = ref('');
@@ -103,14 +114,14 @@
   const errorOllama = ref('');
 
   async function sendPromptToOpenRouter() {
-      if (!promptOpenRouter.value.trim()) return;
+      if (!promptText.value.trim()) return;
 
       loadingOpenRouter.value = true;
       errorOpenRouter.value = '';
       responseOpenRouter.value = '';
 
       const openai = new OpenAI({
-        baseURL: OPENROUTER_URL,
+        baseURL: OPENROUTER_OPENAPI_URL,
         apiKey: OPENROUTER_API_KEY,
         dangerouslyAllowBrowser: true
       });
@@ -119,7 +130,7 @@
           model: OPENROUTER_MODEL_NAME,
           messages: [
             { role: 'system', content: 'Всегда добавляй вначале "Да, мой господин"'},
-            { role: 'user', content: promptOpenRouter.value },
+            { role: 'user', content: promptText.value },
           ],
           temperature: 0.7
         })
@@ -151,7 +162,7 @@
   }
 
   async function sendPromptToLMStudio() {
-      if (!promptOpenRouter.value.trim()) return;
+      if (!promptText.value.trim()) return;
 
       loadingLMStudio.value = true;
       errorLMStudio.value = '';
@@ -161,7 +172,7 @@
           model: LMSTUDIO_MODEL_NAME,
           messages: [
               { role: 'system', content: 'Отвечать на русском языке' },
-              { role: 'user', content: promptOpenRouter.value }
+              { role: 'user', content: promptText.value }
           ],
           temperature: 0.7,
           max_tokens: -1,
@@ -169,7 +180,7 @@
       }
 
       axios.post(
-        LMSTUDIO_URL,
+        LMSTUDIO_OPENAPI_URL,
         payload,
         {
             headers: { 'Content-Type': 'application/json' }
@@ -184,8 +195,8 @@
        );
   }
 
-  async function sendPromptToOllamaLocal() {
-    if (!promptOpenRouter.value.trim()) return;
+  async function sendPromptToOllama() {
+    if (!promptText.value.trim()) return;
 
     loadingOllama.value = true;
     errorOllama.value = '';
@@ -194,12 +205,14 @@
     const payload = {
       model: OLLAMA_MODEL_NAME,
       messages: [
-        { role: 'user', content: promptOpenRouter.value }
+        { role: 'user', content: promptText.value },
       ],
       stream: false
     }
+    const ollama = new Ollama({ host: OLLAMA_HOST });
     ollama.chat(payload)
       .then(res=>{
+        console.log('ollama-js response: ', res);
         responseOllama.value = res?.message?.content;
       })
       .catch(err=>{
@@ -209,35 +222,67 @@
         loadingOllama.value = false;
       });
   }
-  async function sendPromptToOllamaLocalFetch() {
-    if (!promptOpenRouter.value.trim()) return;
+  async function sendPromptToOllamaFetch() {
+    if (!promptText.value.trim()) return;
 
     loadingOllama.value = true;
     errorOllama.value = '';
     responseOllama.value = '';
+
     const payload = {
         model: OLLAMA_MODEL_NAME,
-        prompt: promptOpenRouter.value
+        prompt: promptText.value,
+        stream: false
     }
 
-    console.log('ollama fetch');
-
-    fetch(OLLAMA_URL, {
+    fetch(OLLAMA_HOST + OLLAMA_ENDPOINT, {
       method: 'POST',
       headers: {
-          'Content-Type': 'application/json',
+        'Content-Type': 'application/json',
       },
-      body: payload
-    }).then(res=> {
-        console.log('res: ', res);
-        responseOllama.value = res?.message?.content;
-        // responseOllama.value = res?.message?.content;
+      body: JSON.stringify(
+        payload
+      ),
+    }).then(res=>{
+        return res.json();
+    }).then((data)=>{
+        responseOllama.value = data.response;
     }).catch(err=>{
             errorOllama.value = err;
     }).finally(()=>{
             loadingOllama.value = false;
-        });
+    });
 
+  }
+
+  async function sendPromptToOllamaOpenAPI() {
+    if (!promptText.value.trim()) return;
+
+    loadingOllama.value = true;
+    errorOllama.value = '';
+    responseOllama.value = '';
+
+    const openai = new OpenAI({
+      baseURL: OLLAMA_OPENAPI_URL,
+      apiKey: OLLAMA_API_KEY,
+      dangerouslyAllowBrowser: true
+    });
+
+    openai.chat.completions.create({
+      model: OPENROUTER_MODEL_NAME,
+      prompt: promptText.value
+      // messages: [
+      //   { role: 'system', content: 'Всегда добавляй вначале "Да, мой господин"'},
+      //   { role: 'user', content: promptText.value },
+      // ],
+      // temperature: 0.7
+    }).then((res)=>{
+      responseOllama.value = res.choices[0].message.content;
+    }).catch((err)=>{
+      errorOllama.value = err.message || 'Ошибка запроса';
+    }).finally(()=>{
+      loadingOllama.value = false;
+    });
   }
 </script>
 
